@@ -43,6 +43,13 @@ CDP_PORT = 9222
 CHROME_PROFILE_DIR = os.path.abspath("./chrome_debug_profile")
 BOT_CODE_PATTERN = re.compile(r"BOT-\d{10,}", re.IGNORECASE)
 
+# ─── PENGATURAN JEDA / DELAY (DETIK) ─────────────────────────
+# Memberi waktu agar data assignment, koneksi, dan status survei
+# tersinkronisasi sempurna di sistem FASIH sebelum aksi klik dilakukan.
+DELAY_AFTER_TAB_LOAD = 3.5    # Jeda setelah tab assignment terbuka sebelum klik tombol approve
+DELAY_BEFORE_CONFIRM = 1.5    # Jeda pada modal sebelum klik tombol 'Konfirmasi'
+DELAY_AFTER_CONFIRM = 3.5     # Jeda setelah klik 'Konfirmasi' agar server selesai menyimpan perubahan
+
 
 def print_banner():
     print("""
@@ -446,6 +453,14 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
         # Pastikan fokus tetap di aplikasi yang sedang digunakan pengguna
         restore_user_app(user_app)
         await assignment_tab.wait_for_load_state("domcontentloaded")
+        try:
+            await assignment_tab.wait_for_load_state("load", timeout=5000)
+        except Exception:
+            pass
+        try:
+            await assignment_tab.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
     except Exception as e:
         print(f"  ❌ Gagal membuka tab baru assignment: {e}")
         await close_review_modal_if_open(page)
@@ -454,6 +469,10 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
     # 5. Bekerja di dalam assignment_tab
     try:
         await check_and_handle_bot_block(assignment_tab)
+
+        # Jeda agar kueri data survei, prelist, dan state internal FASIH termuat sempurna
+        print(f"  ⏳ Menunggu {DELAY_AFTER_TAB_LOAD} detik agar seluruh data assignment tersinkronisasi...")
+        await asyncio.sleep(DELAY_AFTER_TAB_LOAD)
 
         # Cari tombol approve checklist hijau
         approve_selectors = [
@@ -488,6 +507,15 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
             await close_review_modal_if_open(page)
             return False
 
+        # Tunggu jika tombol masih dalam keadaan disabled (sedang proses inisialisasi)
+        for _ in range(10):
+            try:
+                if not await approve_btn.is_disabled():
+                    break
+            except Exception:
+                break
+            await asyncio.sleep(0.5)
+
         # Klik tombol Approve
         await approve_btn.click()
         print("  -> Tombol Approve diklik, menunggu modal konfirmasi...")
@@ -495,12 +523,32 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
         # 6. Tunggu modal konfirmasi approve (modal_approve.html)
         confirm_btn = assignment_tab.locator('button:has-text("Konfirmasi"), div[role="alertdialog"] button:has-text("Konfirmasi")')
         await confirm_btn.first.wait_for(state="visible", timeout=7000)
+
+        # Jeda sebelum klik konfirmasi agar dialog siap menerima interaksi
+        if DELAY_BEFORE_CONFIRM > 0:
+            await asyncio.sleep(DELAY_BEFORE_CONFIRM)
+
         await confirm_btn.first.click()
         print(f"  ✅ Tombol Konfirmasi diklik!")
 
-        # 7. Tunggu 2 detik sesuai instruksi
-        print("  ⏳ Menunggu 2 detik agar status tersimpan di server...")
-        await asyncio.sleep(2)
+        # 7. Tunggu respon server selesai diproses
+        print(f"  ⏳ Menunggu {DELAY_AFTER_CONFIRM} detik agar server FASIH selesai menyimpan status...")
+        try:
+            await confirm_btn.first.wait_for(state="hidden", timeout=4000)
+        except Exception:
+            pass
+
+        await asyncio.sleep(DELAY_AFTER_CONFIRM)
+
+        # Periksa apakah ada toast error dari FASIH (misal: Failed approve assignment)
+        try:
+            toast = assignment_tab.locator('[role="alert"], [role="status"], div[class*="toast"], div[class*="alert"]')
+            if await toast.count() > 0 and await toast.first.is_visible():
+                toast_msg = (await toast.first.inner_text()).strip()
+                if any(k in toast_msg.lower() for k in ["fail", "gagal", "error"]):
+                    print(f"  ⚠️ Notifikasi sistem FASIH: {toast_msg}")
+        except Exception:
+            pass
 
     except Exception as e:
         print(f"  ❌ Terjadi kendala di tab assignment: {e}")

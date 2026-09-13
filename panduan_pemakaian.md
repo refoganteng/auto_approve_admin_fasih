@@ -11,10 +11,10 @@ Panduan lengkap penggunaan script otomasi persetujuan (*approval*) data Sensus E
 3. **Alur Otomatis Penuh Sesuai Permintaan**:
    - Klik kode identitas assignment di tabel `halaman_data.html`.
    - Klik tombol **Review** pada modal `modal_review.html`.
-   - Berpindah ke tab baru `halaman_asssignment.html`.
+   - Menunggu seluruh data dan state survei tersinkronisasi penuh (`networkidle` + jeda 3.5 detik).
    - Klik tombol **Approve** (checklist hijau `btn_approve.html`).
-   - Klik tombol **Konfirmasi** pada modal `modal_approve.html`.
-   - Menunggu **2 detik** agar tersimpan di server.
+   - Jeda 1.5 detik pada modal konfirmasi, lalu klik tombol **Konfirmasi**.
+   - Menunggu **3.5 detik** agar request approval selesai diproses & tersimpan di server FASIH.
    - Menutup tab assignment secara otomatis.
    - Menutup modal review di halaman utama.
 4. **Auto Pagination**: Otomatis klik tombol **Next Page** setelah seluruh data (misal 100 data) di halaman aktif selesai di-approve.

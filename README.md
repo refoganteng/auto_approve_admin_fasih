@@ -12,7 +12,8 @@ Otomasi persetujuan (*approval*) dokumen Sensus Ekonomi 2026 oleh Admin Kabupate
    - Membuka tab review assignment.
    - Mengeklik tombol approve (checklist hijau).
    - Mengonfirmasi modal approve.
-   - Menunggu 2 detik untuk memastikan data tersimpan di server.
+   - Menunggu data assignment tersinkronisasi sempurna sebelum klik approve.
+   - Menunggu mutasi konfirmasi selesai diproses di server sebelum menutup tab.
    - Menutup tab assignment dan menutup modal review.
 5. **Auto Pagination**: Otomatis berpindah ke halaman berikutnya saat semua baris data di halaman aktif selesai diproses.
 
@@ -33,3 +34,9 @@ pip install playwright playwright-stealth
 4. Pasang filter status: **`EDITED BY ADMIN KABUPATEN`** dan ubah jumlah rows per halaman menjadi **100**.
 5. Kembali ke terminal dan tekan **ENTER**.
 6. Chrome akan berjalan rapi di setengah layar sebelah kanan, sementara Anda dapat memantau jalannya log terminal di sebelah kiri dengan nyaman.
+
+## ⚙️ Pengaturan Delay (Opsional)
+Jika koneksi internet atau server FASIH sedang lambat, Anda dapat menyesuaikan jeda waktu pada baris 45-50 di `auto_approve.py`:
+- `DELAY_AFTER_TAB_LOAD`: Jeda setelah tab terbuka sebelum klik tombol approve (default: `3.5` detik).
+- `DELAY_BEFORE_CONFIRM`: Jeda pada modal sebelum klik 'Konfirmasi' (default: `1.5` detik).
+- `DELAY_AFTER_CONFIRM`: Jeda setelah klik 'Konfirmasi' agar status tersimpan (default: `3.5` detik).
