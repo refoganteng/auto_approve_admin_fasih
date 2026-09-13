@@ -13,20 +13,19 @@ Alur:
 2. Pengguna login manual & navigasi ke halaman Data, pasang filter status
    'EDITED BY ADMIN KABUPATEN', serta mengatur jumlah data per halaman (100).
 3. Setelah siap, pengguna menekan tombol ENTER di terminal.
-4. Jendela Google Chrome dipindahkan ke posisi off-screen (luar layar)
-   sehingga saat tab baru dibuka, pengguna TIDAK TERGANGGU dan bebas
-   mengerjakan aktivitas lain di Mac.
+4. Jendela Google Chrome diposisikan di setengah layar sebelah KANAN,
+   dan Terminal di setengah layar sebelah KIRI, sehingga pengguna bisa
+   memantau proses log terminal di kiri dan browser di kanan dengan nyaman.
 5. Script beriterasi pada setiap assignment:
    - Klik kode assignment (membuka modal review).
-   - Klik tombol 'Review' (membuka tab baru assignment di background off-screen).
+   - Klik tombol 'Review' (membuka tab baru assignment di Chrome sebelah kanan).
    - Di tab baru, klik tombol approve (checklist hijau).
    - Pada modal konfirmasi approve, klik 'Konfirmasi'.
    - Tunggu 2 detik, lalu tutup tab assignment.
    - Kembali ke tab utama, tutup modal review.
 6. Otomatis klik 'Next Page' jika semua data pada halaman aktif telah selesai,
    dan mengulangi proses hingga halaman terakhir.
-7. Saat selesai atau dihentikan (Ctrl+C), jendela Chrome otomatis dikembalikan
-   ke posisi semula di layar.
+7. Fokus pengguna tetap terjaga di Terminal atau aplikasi kerja di sebelah kiri.
 =============================================================================
 """
 
@@ -75,18 +74,29 @@ def get_chrome_bounds() -> str:
     return ""
 
 
-def maximize_chrome():
-    """Membuat jendela Google Chrome tampil penuh (full screen / maximized)."""
+def position_chrome_right_half():
+    """Menempatkan jendela Google Chrome di setengah layar sebelah kanan."""
     if sys.platform == "darwin":
         try:
             script = '''
+            tell application "Finder"
+                set {dLeft, dTop, dRight, dBottom} to bounds of window of desktop
+            end tell
+
+            set screenWidth to (dRight - dLeft) as integer
+            set winWidth to (screenWidth / 2) as integer
+            if winWidth < 800 then
+                set winWidth to 800
+            end if
+
+            set winLeft to (dRight - winWidth) as integer
+            set winTop to 25
+            set winRight to dRight as integer
+            set winBottom to dBottom as integer
+
             tell application "Google Chrome"
-                activate
                 if (count of windows) > 0 then
-                    tell application "Finder"
-                        set b to bounds of window of desktop
-                    end tell
-                    set bounds of window 1 to b
+                    set bounds of window 1 to {winLeft, winTop, winRight, winBottom}
                 end if
             end tell
             '''
@@ -97,6 +107,13 @@ def maximize_chrome():
         try:
             import ctypes
             user32 = ctypes.windll.user32
+            s_width = user32.GetSystemMetrics(0)   # SM_CXSCREEN
+            s_height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+            w_width = max(s_width // 2, 800)
+            w_left = s_width - w_width
+            w_top = 0
+            w_height = s_height
+
             def enum_handler(hwnd, extra):
                 if user32.IsWindowVisible(hwnd):
                     length = user32.GetWindowTextLengthW(hwnd)
@@ -104,7 +121,8 @@ def maximize_chrome():
                     user32.GetWindowTextW(hwnd, buff, length + 1)
                     title = buff.value
                     if "Chrome" in title or "FASIH" in title:
-                        user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                        user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+                        user32.SetWindowPos(hwnd, 0, w_left, w_top, w_width, w_height, 0x0004)
                 return True
             EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
             user32.EnumWindows(EnumWindowsProc(enum_handler), 0)
@@ -112,59 +130,52 @@ def maximize_chrome():
             pass
     elif sys.platform.startswith("linux"):
         try:
-            subprocess.run(["wmctrl", "-r", "Chrome", "-b", "add,maximized_vert,maximized_horz"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["wmctrl", "-r", "Chrome", "-b", "remove,maximized_vert,maximized_horz"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            res = subprocess.run(["xdotool", "getdisplaygeometry"], capture_output=True, text=True)
+            if res.returncode == 0:
+                parts = res.stdout.strip().split()
+                if len(parts) == 2:
+                    sw, sh = int(parts[0]), int(parts[1])
+                    ww = max(sw // 2, 800)
+                    wl = sw - ww
+                    subprocess.run(["wmctrl", "-r", "Chrome", "-e", f"0,{wl},0,{ww},{sh}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except Exception:
             pass
 
 
-def move_chrome_offscreen():
-    """Memindahkan jendela Chrome ke luar layar agar tidak menutupi kerjaan user."""
+def position_terminal_left_half():
+    """Menempatkan terminal pengguna di setengah layar sebelah kiri (macOS/Linux)."""
     if sys.platform == "darwin":
         try:
-            # Menggunakan resolusi Full HD (1920x1080) saat off-screen agar layout tetap penuh
-            subprocess.run(
-                ["osascript", "-e", 'tell application "Google Chrome" to set bounds of window 1 to {-3000, -3000, -1080, -1920}'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
-            )
+            script = '''
+            tell application "Finder"
+                set {dLeft, dTop, dRight, dBottom} to bounds of window of desktop
+            end tell
+
+            set screenWidth to (dRight - dLeft) as integer
+            set winWidth to (screenWidth / 2) as integer
+
+            set winLeft to dLeft as integer
+            set winTop to 25
+            set winRight to (dLeft + winWidth) as integer
+            set winBottom to dBottom as integer
+
+            tell application "System Events"
+                set frontProc to first application process whose frontmost is true
+                set procName to name of frontProc
+            end tell
+
+            if procName contains "Terminal" or procName contains "iTerm" or procName contains "Code" or procName contains "Alacritty" or procName contains "Kitty" or procName contains "Ghostty" then
+                tell application procName
+                    if (count of windows) > 0 then
+                        set bounds of window 1 to {winLeft, winTop, winRight, winBottom}
+                    end if
+                end tell
+            end if
+            '''
+            subprocess.run(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
         except Exception:
             pass
-    elif sys.platform == "win32":
-        try:
-            import ctypes
-            user32 = ctypes.windll.user32
-            def enum_handler(hwnd, extra):
-                if user32.IsWindowVisible(hwnd):
-                    length = user32.GetWindowTextLengthW(hwnd)
-                    buff = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buff, length + 1)
-                    title = buff.value
-                    if "Chrome" in title or "FASIH" in title:
-                        # Pindahkan ke (-3000, -3000) dengan ukuran 1920x1080
-                        user32.SetWindowPos(hwnd, 0, -3000, -3000, 1920, 1080, 0x0010 | 0x0004)  # SWP_NOACTIVATE | SWP_NOZORDER
-                return True
-            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-            user32.EnumWindows(EnumWindowsProc(enum_handler), 0)
-        except Exception:
-            pass
-
-
-def restore_chrome_bounds(bounds: str = ""):
-    """Mengembalikan jendela Chrome ke layar normal / maximized penuh."""
-    if sys.platform == "darwin":
-        if bounds and bounds != "win32":
-            try:
-                subprocess.run(
-                    ["osascript", "-e", f'tell application "Google Chrome" to set bounds of window 1 to {{{bounds}}}'],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
-                )
-                return
-            except Exception:
-                pass
-        maximize_chrome()
-    elif sys.platform == "win32":
-        maximize_chrome()
-    elif sys.platform.startswith("linux"):
-        maximize_chrome()
 
 
 def get_frontmost_app() -> str:
@@ -313,7 +324,7 @@ def launch_chrome_with_cdp():
         time.sleep(1)
         if is_chrome_cdp_ready():
             print("[INFO] Google Chrome CDP siap terhubung!")
-            maximize_chrome()
+            position_chrome_right_half()
             return proc
 
     print("[ERROR] Batas waktu habis menunggu Chrome CDP aktif.")
@@ -324,7 +335,7 @@ def launch_chrome_with_cdp():
 # ─────────────────────────────────────────────────────────────
 # 3. ANTI-BOT BLOCK DETECTION
 # ─────────────────────────────────────────────────────────────
-async def check_and_handle_bot_block(page, orig_bounds: str = "") -> bool:
+async def check_and_handle_bot_block(page) -> bool:
     """Memeriksa apakah ada pesan pencegahan bot dari FASIH BPS."""
     try:
         content = await page.content()
@@ -334,21 +345,14 @@ async def check_and_handle_bot_block(page, orig_bounds: str = "") -> bool:
             or BOT_CODE_PATTERN.search(content)
         )
         if is_blocked:
-            # Kembalikan jendela Chrome ke layar agar user bisa melihat dan menyelesaikan
-            if orig_bounds:
-                restore_chrome_bounds(orig_bounds)
-
+            position_chrome_right_half()
             print("\a\n" + "!" * 65)
             print("  ⚠️ TERDETEKSI SISTEM PENGAMAN BPS (BOT BLOCK)!")
-            print("  Jendela Chrome telah dikembalikan ke layar:")
+            print("  Jendela Chrome tampil di setengah layar sebelah kanan:")
             print("  1. Klik tombol '[Kembali]' atau refresh halaman di Chrome.")
             print("  2. Pastikan halaman normal kembali.")
             print("!" * 65)
             input("\nSetelah halaman kembali normal, tekan ENTER di sini untuk lanjut...")
-            
-            # Pindahkan kembali ke luar layar
-            if orig_bounds:
-                move_chrome_offscreen()
             await asyncio.sleep(2)
             return True
     except Exception:
@@ -529,7 +533,7 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
 # ─────────────────────────────────────────────────────────────
 # 6. LOOP UTAMA: ITERASI TABEL & PAGINATION
 # ─────────────────────────────────────────────────────────────
-async def run_automation(page, context, user_app: str = "", orig_bounds: str = ""):
+async def run_automation(page, context, user_app: str = ""):
     """Menjalankan otomasi seluruh halaman secara berulang."""
     current_page_number = 1
     total_approved_session = 0
@@ -539,7 +543,7 @@ async def run_automation(page, context, user_app: str = "", orig_bounds: str = "
         print(f"📄 MEMPROSES HALAMAN: {current_page_number}")
         print(f"{'='*65}")
 
-        await check_and_handle_bot_block(page, orig_bounds)
+        await check_and_handle_bot_block(page)
 
         # Tunggu tabel termuat di halaman
         try:
@@ -649,10 +653,13 @@ async def main():
 
         ctx = browser.contexts[0]
         page = await find_data_page(ctx)
-        maximize_chrome()
+
+        # Tata letak: Chrome di kanan, terminal di kiri
+        position_chrome_right_half()
+        position_terminal_left_half()
 
         print("\n" + "=" * 65)
-        print("📌 INSTRUKSI PERSIAPAN MANUAL DI CHROME:")
+        print("📌 INSTRUKSI PERSIAPAN MANUAL DI CHROME (SEBELAH KANAN):")
         print("   1. Pastikan Anda sudah LOGIN ke akun FASIH-SM.")
         print("   2. Masuk ke halaman DATA survei SE2026.")
         print("   3. Pasang filter status: 'EDITED BY ADMIN KABUPATEN'.")
@@ -661,19 +668,17 @@ async def main():
         print("=" * 65)
         input("\n👉 Jika halaman Data sudah siap & difilter, tekan ENTER di sini untuk mulai...")
 
-        # Ambil posisi jendela Chrome saat ini agar bisa dikembalikan nanti
-        orig_bounds = get_chrome_bounds()
         user_app = get_frontmost_app()
 
-        print("\n[INFO] Memindahkan jendela Chrome ke background luar layar agar Anda bebas beraktivitas...")
-        move_chrome_offscreen()
+        print("\n[INFO] Menjaga Chrome di setengah kanan & terminal di kiri selama proses...")
+        position_chrome_right_half()
         restore_user_app(user_app)
 
         # Pastikan kita memakai tab data yang aktif
         page = await find_data_page(ctx)
 
         try:
-            await run_automation(page, ctx, user_app, orig_bounds)
+            await run_automation(page, ctx, user_app)
         except (KeyboardInterrupt, asyncio.CancelledError):
             print("\n\n[INFO] Otomasi dihentikan secara manual oleh pengguna (Ctrl+C).")
         except Exception as e:
@@ -681,8 +686,8 @@ async def main():
             import traceback
             traceback.print_exc()
         finally:
-            restore_chrome_bounds(orig_bounds)
-            print("[INFO] Jendela Google Chrome telah dikembalikan ke layar.")
+            position_chrome_right_half()
+            print("[INFO] Selesai. Posisi Chrome tetap rapi di setengah layar sebelah kanan.")
 
 
 if __name__ == "__main__":

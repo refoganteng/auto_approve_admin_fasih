@@ -6,8 +6,8 @@ Otomasi persetujuan (*approval*) dokumen Sensus Ekonomi 2026 oleh Admin Kabupate
 
 1. **Anti-Bot & Bebas Blokir**: Menggunakan Google Chrome asli via CDP (*Chrome DevTools Protocol*), menghindari deteksi bot otomasi standar.
 2. **Sesi Persisten**: Cookies dan sesi login tersimpan di folder profil browser sehingga tidak perlu login berulang kali.
-3. **Background Off-Screen Window**: Jendela Chrome otomatis dipindahkan ke luar layar (*off-screen*) saat otomasi berjalan, sehingga membuka/menutup tab tidak merebut fokus layar atau mengganggu pekerjaan Anda di Mac.
-4. **Alur Otomatis Penuh**:
+3. **Tata Letak Split-Screen (Setengah Layar)**: Jendela Chrome otomatis diposisikan di setengah layar sebelah KANAN, dan Terminal di sebelah KIRI. Anda dapat memantau log proses bot secara langsung di terminal sambil melihat browser bekerja di sebelah kanan tanpa saling menutupi.
+4. **Fokus Tetap Terjaga**: Fokus kursor/keyboard otomatis dijaga tetap di Terminal/aplikasi kerja Anda saat tab baru dibuka dan ditutup.
    - Membuka modal review dari kode assignment di tabel.
    - Membuka tab review assignment.
    - Mengeklik tombol approve (checklist hijau).
@@ -32,4 +32,4 @@ pip install playwright playwright-stealth
 3. Masuk ke halaman **Data** survei SE2026.
 4. Pasang filter status: **`EDITED BY ADMIN KABUPATEN`** dan ubah jumlah rows per halaman menjadi **100**.
 5. Kembali ke terminal dan tekan **ENTER**.
-6. Chrome akan berjalan di background dan Anda bebas melanjutkan pekerjaan lain di Mac.
+6. Chrome akan berjalan rapi di setengah layar sebelah kanan, sementara Anda dapat memantau jalannya log terminal di sebelah kiri dengan nyaman.
