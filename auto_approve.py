@@ -57,94 +57,211 @@ def print_banner():
 
 
 # ─────────────────────────────────────────────────────────────
-# 1. HELPER: WINDOW MANAGEMENT (MACOS OFF-SCREEN & RESTORE)
+# 1. HELPER: WINDOW MANAGEMENT (CROSS-PLATFORM: MAC, WIN, LINUX)
 # ─────────────────────────────────────────────────────────────
 def get_chrome_bounds() -> str:
-    """Mengambil koordinat dan ukuran jendela Chrome saat ini di macOS."""
-    try:
-        res = subprocess.run(
-            ["osascript", "-e", 'tell application "Google Chrome" to get bounds of window 1'],
-            capture_output=True, text=True, timeout=2
-        )
-        return res.stdout.strip()
-    except Exception:
-        return ""
+    """Mengambil koordinat dan ukuran jendela Chrome saat ini."""
+    if sys.platform == "darwin":
+        try:
+            res = subprocess.run(
+                ["osascript", "-e", 'tell application "Google Chrome" to get bounds of window 1'],
+                capture_output=True, text=True, timeout=2
+            )
+            return res.stdout.strip()
+        except Exception:
+            return ""
+    elif sys.platform == "win32":
+        return "win32"
+    return ""
+
+
+def maximize_chrome():
+    """Membuat jendela Google Chrome tampil penuh (full screen / maximized)."""
+    if sys.platform == "darwin":
+        try:
+            script = '''
+            tell application "Google Chrome"
+                activate
+                if (count of windows) > 0 then
+                    tell application "Finder"
+                        set b to bounds of window of desktop
+                    end tell
+                    set bounds of window 1 to b
+                end if
+            end tell
+            '''
+            subprocess.run(["osascript", "-e", script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            def enum_handler(hwnd, extra):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value
+                    if "Chrome" in title or "FASIH" in title:
+                        user32.ShowWindow(hwnd, 3)  # SW_MAXIMIZE
+                return True
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            user32.EnumWindows(EnumWindowsProc(enum_handler), 0)
+        except Exception:
+            pass
+    elif sys.platform.startswith("linux"):
+        try:
+            subprocess.run(["wmctrl", "-r", "Chrome", "-b", "add,maximized_vert,maximized_horz"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
 
 
 def move_chrome_offscreen():
     """Memindahkan jendela Chrome ke luar layar agar tidak menutupi kerjaan user."""
-    try:
-        subprocess.run(
-            ["osascript", "-e", 'tell application "Google Chrome" to set bounds of window 1 to {-2500, -2500, -1060, -1600}'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
-        )
-    except Exception:
-        pass
+    if sys.platform == "darwin":
+        try:
+            # Menggunakan resolusi Full HD (1920x1080) saat off-screen agar layout tetap penuh
+            subprocess.run(
+                ["osascript", "-e", 'tell application "Google Chrome" to set bounds of window 1 to {-3000, -3000, -1080, -1920}'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
+            )
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            def enum_handler(hwnd, extra):
+                if user32.IsWindowVisible(hwnd):
+                    length = user32.GetWindowTextLengthW(hwnd)
+                    buff = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buff, length + 1)
+                    title = buff.value
+                    if "Chrome" in title or "FASIH" in title:
+                        # Pindahkan ke (-3000, -3000) dengan ukuran 1920x1080
+                        user32.SetWindowPos(hwnd, 0, -3000, -3000, 1920, 1080, 0x0010 | 0x0004)  # SWP_NOACTIVATE | SWP_NOZORDER
+                return True
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+            user32.EnumWindows(EnumWindowsProc(enum_handler), 0)
+        except Exception:
+            pass
 
 
-def restore_chrome_bounds(bounds: str):
-    """Mengembalikan jendela Chrome ke posisi semula di layar."""
-    if not bounds:
-        bounds = "50, 50, 1280, 900"
-    try:
-        subprocess.run(
-            ["osascript", "-e", f'tell application "Google Chrome" to set bounds of window 1 to {{{bounds}}}'],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
-        )
-    except Exception:
-        pass
+def restore_chrome_bounds(bounds: str = ""):
+    """Mengembalikan jendela Chrome ke layar normal / maximized penuh."""
+    if sys.platform == "darwin":
+        if bounds and bounds != "win32":
+            try:
+                subprocess.run(
+                    ["osascript", "-e", f'tell application "Google Chrome" to set bounds of window 1 to {{{bounds}}}'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2
+                )
+                return
+            except Exception:
+                pass
+        maximize_chrome()
+    elif sys.platform == "win32":
+        maximize_chrome()
+    elif sys.platform.startswith("linux"):
+        maximize_chrome()
 
 
 def get_frontmost_app() -> str:
-    """Mendapatkan nama aplikasi yang sedang aktif digunakan pengguna."""
-    try:
-        res = subprocess.run(
-            ["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
-            capture_output=True, text=True, timeout=1
-        )
-        name = res.stdout.strip()
-        if name and name != "Google Chrome":
-            return name
-    except Exception:
-        pass
+    """Mendapatkan nama/ID aplikasi yang sedang aktif digunakan pengguna."""
+    if sys.platform == "darwin":
+        try:
+            res = subprocess.run(
+                ["osascript", "-e", 'tell application "System Events" to get name of first application process whose frontmost is true'],
+                capture_output=True, text=True, timeout=1
+            )
+            name = res.stdout.strip()
+            if name and name != "Google Chrome":
+                return name
+        except Exception:
+            pass
+    elif sys.platform == "win32":
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            hwnd = user32.GetForegroundWindow()
+            return str(hwnd)
+        except Exception:
+            pass
     return ""
 
 
 def restore_user_app(app_name: str):
     """Menjaga agar aplikasi kerja pengguna tetap aktif di layar."""
-    front = get_frontmost_app()
-    target = front if (front and front != "Google Chrome") else app_name
-    if target and target != "Google Chrome":
-        try:
-            subprocess.run(
-                ["osascript", "-e", f'tell application "{target}" to activate'],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1
-            )
-        except Exception:
-            pass
+    if sys.platform == "darwin":
+        front = get_frontmost_app()
+        target = front if (front and front != "Google Chrome") else app_name
+        if target and target != "Google Chrome":
+            try:
+                subprocess.run(
+                    ["osascript", "-e", f'tell application "{target}" to activate'],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=1
+                )
+            except Exception:
+                pass
+    elif sys.platform == "win32":
+        if app_name and app_name.isdigit():
+            try:
+                import ctypes
+                user32 = ctypes.windll.user32
+                user32.SetForegroundWindow(int(app_name))
+            except Exception:
+                pass
 
 
 # ─────────────────────────────────────────────────────────────
 # 2. HELPER: CHROME CDP LAUNCHER & DETECTION
 # ─────────────────────────────────────────────────────────────
 def find_chrome_path() -> str:
-    """Mencari path binary Google Chrome di macOS atau Linux/Windows."""
-    mac_paths = [
-        "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-        os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-    ]
-    for p in mac_paths:
-        if os.path.isfile(p):
-            return p
+    """Mencari path binary Google Chrome di macOS, Windows, atau Linux."""
+    import shutil
 
-    linux_paths = [
-        "/usr/bin/google-chrome",
-        "/usr/bin/google-chrome-stable",
-        "/usr/bin/chromium-browser",
-    ]
-    for p in linux_paths:
-        if os.path.isfile(p):
-            return p
+    # 1. macOS paths
+    if sys.platform == "darwin":
+        mac_paths = [
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        ]
+        for p in mac_paths:
+            if os.path.isfile(p):
+                return p
+
+    # 2. Windows paths
+    elif sys.platform == "win32":
+        win_paths = [
+            os.path.expandvars(r"%ProgramFiles%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"),
+            os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        ]
+        for p in win_paths:
+            if os.path.isfile(p):
+                return p
+
+    # 3. Linux paths
+    elif sys.platform.startswith("linux"):
+        linux_paths = [
+            "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium-browser",
+            "/usr/bin/chromium",
+            "/snap/bin/chromium",
+        ]
+        for p in linux_paths:
+            if os.path.isfile(p):
+                return p
+
+    # 4. Fallback jika ada di PATH sistem
+    for name in ["google-chrome", "google-chrome-stable", "chrome", "chromium", "chromium-browser"]:
+        found = shutil.which(name)
+        if found:
+            return found
 
     return ""
 
@@ -196,6 +313,7 @@ def launch_chrome_with_cdp():
         time.sleep(1)
         if is_chrome_cdp_ready():
             print("[INFO] Google Chrome CDP siap terhubung!")
+            maximize_chrome()
             return proc
 
     print("[ERROR] Batas waktu habis menunggu Chrome CDP aktif.")
@@ -321,11 +439,6 @@ async def process_single_assignment(page, context, btn, assignment_id: str, user
         async with context.expect_page(timeout=15000) as new_page_info:
             await review_btn.first.click()
         assignment_tab = await new_page_info.value
-        # Pastikan ukuran desktop agar toolbar f:hidden f:md:flex selalu muncul
-        try:
-            await assignment_tab.set_viewport_size({"width": 1440, "height": 900})
-        except Exception:
-            pass
         # Pastikan fokus tetap di aplikasi yang sedang digunakan pengguna
         restore_user_app(user_app)
         await assignment_tab.wait_for_load_state("domcontentloaded")
@@ -536,6 +649,7 @@ async def main():
 
         ctx = browser.contexts[0]
         page = await find_data_page(ctx)
+        maximize_chrome()
 
         print("\n" + "=" * 65)
         print("📌 INSTRUKSI PERSIAPAN MANUAL DI CHROME:")
