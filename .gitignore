@@ -1,0 +1,25 @@
+# HTML files (semua file HTML / HTM)
+*.html
+*.htm
+
+# Folder referensi
+referensi/
+
+# Chrome debug profile (berisi cookies, token, dan data sesi pengguna)
+chrome_debug_profile/
+
+# Python cache & virtual environment
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.env
+.venv/
+venv/
+env/
+
+# macOS system files
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
