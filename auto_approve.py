@@ -46,9 +46,9 @@ BOT_CODE_PATTERN = re.compile(r"BOT-\d{10,}", re.IGNORECASE)
 # ─── PENGATURAN JEDA / DELAY (DETIK) ─────────────────────────
 # Memberi waktu agar data assignment, koneksi, dan status survei
 # tersinkronisasi sempurna di sistem FASIH sebelum aksi klik dilakukan.
-DELAY_AFTER_TAB_LOAD = 3.5    # Jeda setelah tab assignment terbuka sebelum klik tombol approve
-DELAY_BEFORE_CONFIRM = 1.5    # Jeda pada modal sebelum klik tombol 'Konfirmasi'
-DELAY_AFTER_CONFIRM = 3.5     # Jeda setelah klik 'Konfirmasi' agar server selesai menyimpan perubahan
+DELAY_AFTER_TAB_LOAD = 0.5    # Jeda setelah tab assignment terbuka sebelum klik tombol approve
+DELAY_BEFORE_CONFIRM = 0.5    # Jeda pada modal sebelum klik tombol 'Konfirmasi'
+DELAY_AFTER_CONFIRM = 1     # Jeda setelah klik 'Konfirmasi' agar server selesai menyimpan perubahan
 
 
 def print_banner():
@@ -63,7 +63,90 @@ def print_banner():
 
 
 # ─────────────────────────────────────────────────────────────
-# 1. HELPER: WINDOW MANAGEMENT (CROSS-PLATFORM: MAC, WIN, LINUX)
+# 1. HELPER: ANTI-SCREEN OFF / SLEEP PREVENTER (CROSS-PLATFORM)
+# ─────────────────────────────────────────────────────────────
+class ScreenSleepPreventer:
+    """Mencegah layar komputer mati (screen off) atau tidur (sleep) saat otomasi berjalan."""
+
+    def __init__(self):
+        self._caffeinate_proc = None
+        self._active = False
+
+    def enable(self):
+        if self._active:
+            return
+        self._active = True
+
+        # 1. macOS: Gunakan perintah 'caffeinate' bawaan macOS
+        if sys.platform == "darwin":
+            try:
+                # -d: cegah display/screen sleep (layar tetap nyala)
+                # -i: cegah system idle sleep
+                # -w <pid>: otomatis berhenti begitu process Python ini berhenti
+                self._caffeinate_proc = subprocess.Popen(
+                    ["caffeinate", "-d", "-i", "-w", str(os.getpid())],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                print("[INFO] Anti-Screen Off aktif: Layar tidak akan mati/tidur selama otomasi berjalan.")
+            except Exception as e:
+                print(f"[WARN] Gagal mengaktifkan caffeinate (macOS): {e}")
+
+        # 2. Windows: Gunakan Win32 API SetThreadExecutionState
+        elif sys.platform == "win32":
+            try:
+                import ctypes
+                ES_CONTINUOUS = 0x80000000
+                ES_SYSTEM_REQUIRED = 0x00000001
+                ES_DISPLAY_REQUIRED = 0x00000002
+                ctypes.windll.kernel32.SetThreadExecutionState(
+                    ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED
+                )
+                print("[INFO] Anti-Screen Off aktif: Layar tidak akan mati/tidur selama otomasi berjalan.")
+            except Exception as e:
+                print(f"[WARN] Gagal mengaktifkan anti-sleep (Windows): {e}")
+
+        # 3. Linux: xset s off / xset -dpms jika X11 tersedia
+        elif sys.platform.startswith("linux"):
+            try:
+                subprocess.run(["xset", "s", "off"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["xset", "-dpms"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print("[INFO] Anti-Screen Off aktif: Layar tidak akan mati/tidur selama otomasi berjalan.")
+            except Exception:
+                pass
+
+    def disable(self):
+        if not self._active:
+            return
+        self._active = False
+
+        if sys.platform == "darwin":
+            if self._caffeinate_proc:
+                try:
+                    self._caffeinate_proc.terminate()
+                    self._caffeinate_proc.wait(timeout=2)
+                except Exception:
+                    pass
+                self._caffeinate_proc = None
+
+        elif sys.platform == "win32":
+            try:
+                import ctypes
+                ES_CONTINUOUS = 0x80000000
+                ctypes.windll.kernel32.SetThreadExecutionState(ES_CONTINUOUS)
+            except Exception:
+                pass
+
+        elif sys.platform.startswith("linux"):
+            try:
+                subprocess.run(["xset", "s", "default"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                subprocess.run(["xset", "+dpms"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+
+
+# ─────────────────────────────────────────────────────────────
+# 2. HELPER: WINDOW MANAGEMENT (CROSS-PLATFORM: MAC, WIN, LINUX)
 # ─────────────────────────────────────────────────────────────
 def get_chrome_bounds() -> str:
     """Mengambil koordinat dan ukuran jendela Chrome saat ini."""
@@ -688,54 +771,61 @@ async def run_automation(page, context, user_app: str = ""):
 async def main():
     print_banner()
 
-    # 1. Jalankan atau sambungkan ke Google Chrome asli
-    chrome_proc = launch_chrome_with_cdp()
+    # Mencegah layar mati / sleep saat otomasi berjalan
+    sleep_preventer = ScreenSleepPreventer()
+    sleep_preventer.enable()
 
-    async with async_playwright() as p:
-        print("[INFO] Menghubungkan Playwright ke Google Chrome via CDP...")
-        try:
-            browser = await p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
-        except Exception as e:
-            print(f"[ERROR] Gagal connect ke Chrome di port {CDP_PORT}: {e}")
-            sys.exit(1)
+    try:
+        # 1. Jalankan atau sambungkan ke Google Chrome asli
+        chrome_proc = launch_chrome_with_cdp()
 
-        ctx = browser.contexts[0]
-        page = await find_data_page(ctx)
+        async with async_playwright() as p:
+            print("[INFO] Menghubungkan Playwright ke Google Chrome via CDP...")
+            try:
+                browser = await p.chromium.connect_over_cdp(f"http://127.0.0.1:{CDP_PORT}")
+            except Exception as e:
+                print(f"[ERROR] Gagal connect ke Chrome di port {CDP_PORT}: {e}")
+                sys.exit(1)
 
-        # Tata letak: Chrome di kanan, terminal di kiri
-        position_chrome_right_half()
-        position_terminal_left_half()
+            ctx = browser.contexts[0]
+            page = await find_data_page(ctx)
 
-        print("\n" + "=" * 65)
-        print("📌 INSTRUKSI PERSIAPAN MANUAL DI CHROME (SEBELAH KANAN):")
-        print("   1. Pastikan Anda sudah LOGIN ke akun FASIH-SM.")
-        print("   2. Masuk ke halaman DATA survei SE2026.")
-        print("   3. Pasang filter status: 'EDITED BY ADMIN KABUPATEN'.")
-        print("   4. Atur jumlah data per halaman menjadi 100 data.")
-        print("   5. Pastikan tabel data sudah muncul di layar Chrome.")
-        print("=" * 65)
-        input("\n👉 Jika halaman Data sudah siap & difilter, tekan ENTER di sini untuk mulai...")
-
-        user_app = get_frontmost_app()
-
-        print("\n[INFO] Menjaga Chrome di setengah kanan & terminal di kiri selama proses...")
-        position_chrome_right_half()
-        restore_user_app(user_app)
-
-        # Pastikan kita memakai tab data yang aktif
-        page = await find_data_page(ctx)
-
-        try:
-            await run_automation(page, ctx, user_app)
-        except (KeyboardInterrupt, asyncio.CancelledError):
-            print("\n\n[INFO] Otomasi dihentikan secara manual oleh pengguna (Ctrl+C).")
-        except Exception as e:
-            print(f"\n[ERROR] Terjadi kendala saat otomasi: {e}")
-            import traceback
-            traceback.print_exc()
-        finally:
+            # Tata letak: Chrome di kanan, terminal di kiri
             position_chrome_right_half()
-            print("[INFO] Selesai. Posisi Chrome tetap rapi di setengah layar sebelah kanan.")
+            position_terminal_left_half()
+
+            print("\n" + "=" * 65)
+            print("📌 INSTRUKSI PERSIAPAN MANUAL DI CHROME (SEBELAH KANAN):")
+            print("   1. Pastikan Anda sudah LOGIN ke akun FASIH-SM.")
+            print("   2. Masuk ke halaman DATA survei SE2026.")
+            print("   3. Pasang filter status: 'EDITED BY ADMIN KABUPATEN'.")
+            print("   4. Atur jumlah data per halaman menjadi 100 data.")
+            print("   5. Pastikan tabel data sudah muncul di layar Chrome.")
+            print("=" * 65)
+            input("\n👉 Jika halaman Data sudah siap & difilter, tekan ENTER di sini untuk mulai...")
+
+            user_app = get_frontmost_app()
+
+            print("\n[INFO] Menjaga Chrome di setengah kanan & terminal di kiri selama proses...")
+            position_chrome_right_half()
+            restore_user_app(user_app)
+
+            # Pastikan kita memakai tab data yang aktif
+            page = await find_data_page(ctx)
+
+            try:
+                await run_automation(page, ctx, user_app)
+            except (KeyboardInterrupt, asyncio.CancelledError):
+                print("\n\n[INFO] Otomasi dihentikan secara manual oleh pengguna (Ctrl+C).")
+            except Exception as e:
+                print(f"\n[ERROR] Terjadi kendala saat otomasi: {e}")
+                import traceback
+                traceback.print_exc()
+            finally:
+                position_chrome_right_half()
+                print("[INFO] Selesai. Posisi Chrome tetap rapi di setengah layar sebelah kanan.")
+    finally:
+        sleep_preventer.disable()
 
 
 if __name__ == "__main__":

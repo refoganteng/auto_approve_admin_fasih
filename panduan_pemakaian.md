@@ -20,6 +20,7 @@ Panduan lengkap penggunaan script otomasi persetujuan (*approval*) data Sensus E
 4. **Auto Pagination**: Otomatis klik tombol **Next Page** setelah seluruh data (misal 100 data) di halaman aktif selesai di-approve.
 5. **Eksekusi Langsung Baris demi Baris**: Tidak bergantung pada file riwayat eksternal. Karena Anda selalu memfilter manual di awal, bot akan langsung memproses seluruh baris data yang tampil di tabel secara berurutan.
 6. **Tata Letak Split-Screen (Setengah Kanan untuk Chrome, Kiri untuk Terminal)**: Saat dijalankan, jendela Google Chrome otomatis diposisikan di setengah layar sebelah KANAN, dan Terminal di sebelah KIRI. Anda dapat memantau log terminal di kiri sambil melihat proses browser di kanan tanpa saling tumpang tindih. Fokus pengetikan Anda juga tetap terkunci di Terminal.
+7. **Anti-Screen Off (Layar Tetap Menyala)**: Otomatis menjaga layar dan sistem agar tidak mati (*screen off*) atau tidur (*sleep*) selama proses approval berlangsung di macOS, Windows, maupun Linux.
 
 ---
 

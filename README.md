@@ -16,6 +16,7 @@ Otomasi persetujuan (*approval*) dokumen Sensus Ekonomi 2026 oleh Admin Kabupate
    - Menunggu mutasi konfirmasi selesai diproses di server sebelum menutup tab.
    - Menutup tab assignment dan menutup modal review.
 5. **Auto Pagination**: Otomatis berpindah ke halaman berikutnya saat semua baris data di halaman aktif selesai diproses.
+6. **Anti-Screen Off (Layar Tetap Menyala)**: Otomatis mencegah layar mati (*screen off*) atau komputer tidur (*sleep*) selama otomasi berlangsung di macOS (`caffeinate`), Windows (`SetThreadExecutionState`), dan Linux (`xset`).
 
 ## 🛠️ Prasyarat
 
